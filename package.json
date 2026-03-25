@@ -1,0 +1,14 @@
+{
+  "name": "claude-orchestrator",
+  "version": "1.0.0",
+  "description": "WebSocket C&C interface for jay-claude-plugins queue system",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}

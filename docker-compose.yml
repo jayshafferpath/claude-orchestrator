@@ -1,0 +1,15 @@
+services:
+  orchestrator:
+    build: .
+    ports:
+      - "${PORT:-3100}:3100"
+    env_file:
+      - .env
+    environment:
+      - PORT=3100
+      - CLAUDE_BIN=claude
+      - WORK_DIR=/workspace
+    volumes:
+      - ${WORK_DIR:-..}:/workspace
+      - ${HOME}/.claude:/root/.claude
+    restart: unless-stopped

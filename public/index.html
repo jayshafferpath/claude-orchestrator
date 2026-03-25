@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Orchestrator</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --orange: #d29922;
+      --purple: #bc8cff;
+      --cyan: #39d2c0;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
+
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    #jira-updated {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    #connection-status {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: var(--red);
+      color: #fff;
+    }
+
+    #connection-status.connected { background: var(--green); }
+
+    /* Layout: sidebar + main */
+    .container {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      height: calc(100vh - 49px);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      overflow-y: auto;
+      padding: 14px;
+    }
+
+    .sidebar h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .cmd-btn {
+      display: block;
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 5px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .cmd-btn:hover { border-color: var(--accent); background: #1c2128; }
+    .cmd-btn.queue { border-left: 3px solid var(--accent); }
+    .cmd-btn.pr { border-left: 3px solid var(--purple); }
+    .cmd-btn.other { border-left: 3px solid var(--orange); }
+    .cmd-btn .cmd-label { font-weight: 600; }
+    .cmd-btn .cmd-key { font-size: 10px; color: var(--text-muted); }
+
+    .sidebar hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 14px 0;
+    }
+
+    .session-item {
+      padding: 6px 10px;
+      margin-bottom: 3px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      border: 1px solid transparent;
+      transition: background 0.15s;
+    }
+
+    .session-item:hover { background: var(--bg); }
+    .session-item.active { border-color: var(--accent); background: var(--bg); }
+
+    .session-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+
+    .session-dot.running { background: var(--green); animation: pulse 1.5s infinite; }
+    .session-dot.completed { background: var(--text-muted); }
+    .session-dot.failed, .session-dot.error { background: var(--red); }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .session-item .session-label { font-weight: 600; }
+    .session-item .session-time { color: var(--text-muted); font-size: 10px; }
+
+    .kill-btn {
+      font-size: 10px;
+      color: var(--red);
+      background: none;
+      border: 1px solid var(--red);
+      border-radius: 4px;
+      padding: 1px 6px;
+      cursor: pointer;
+      font-family: inherit;
+      margin-top: 2px;
+    }
+
+    .kill-btn:hover { background: rgba(248, 81, 73, 0.15); }
+
+    .clear-btn {
+      display: block;
+      width: 100%;
+      padding: 6px;
+      margin-top: 8px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .clear-btn:hover { border-color: var(--text-muted); }
+
+    /* Main area: kanban + logs */
+    .main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Tab bar */
+    .tab-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .tab-btn {
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-panel { display: none; flex: 1; overflow: hidden; }
+    .tab-panel.active { display: flex; flex-direction: column; }
+
+    /* Kanban board */
+    .kanban {
+      flex: 1;
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+      padding: 0;
+    }
+
+    .kanban-col {
+      flex: 1;
+      min-width: 180px;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+    }
+
+    .kanban-col:last-child { border-right: none; }
+
+    .kanban-col-header {
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+    }
+
+    .kanban-col-header .col-count {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .kanban-col[data-col="ready"] .kanban-col-header { color: var(--accent); }
+    .kanban-col[data-col="planning"] .kanban-col-header { color: var(--cyan); }
+    .kanban-col[data-col="needsApproval"] .kanban-col-header { color: var(--orange); }
+    .kanban-col[data-col="approved"] .kanban-col-header { color: var(--green); }
+    .kanban-col[data-col="executing"] .kanban-col-header { color: var(--purple); }
+    .kanban-col[data-col="needsReview"] .kanban-col-header { color: var(--accent); }
+    .kanban-col[data-col="failed"] .kanban-col-header { color: var(--red); }
+    .kanban-col[data-col="done"] .kanban-col-header { color: var(--text-muted); }
+
+    .kanban-cards {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .ticket-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 6px;
+      transition: border-color 0.15s;
+    }
+
+    .ticket-card:hover { border-color: var(--text-muted); }
+
+    .ticket-key {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .ticket-summary {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+
+    .ticket-meta {
+      display: flex;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .ticket-type { text-transform: uppercase; letter-spacing: 0.3px; }
+
+    .ticket-parent {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .kanban-empty {
+      color: var(--text-muted);
+      font-size: 11px;
+      text-align: center;
+      padding: 20px 8px;
+    }
+
+    .jira-disabled {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 40px;
+      text-align: center;
+      line-height: 1.8;
+    }
+
+    .refresh-btn {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      margin-left: 8px;
+    }
+
+    .refresh-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Logs panel */
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .log-header .session-title { font-weight: 600; }
+
+    #log-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 20px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    #log-container:empty::after {
+      content: 'Select a command to run or a session to view logs.';
+      color: var(--text-muted);
+    }
+
+    .log-line { white-space: pre-wrap; word-break: break-all; }
+    .log-line.stderr { color: var(--orange); }
+    .log-line.stdout { color: var(--text); }
+    .log-line .log-ts { color: var(--text-muted); font-size: 10px; margin-right: 8px; user-select: none; }
+
+    #autoscroll-toggle {
+      font-size: 11px;
+      color: var(--text-muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 8px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    #autoscroll-toggle.active { color: var(--accent); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Claude Orchestrator</h1>
+    <div class="header-right">
+      <span id="jira-updated"></span>
+      <span id="connection-status">disconnected</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="sidebar">
+      <h2>Commands</h2>
+      <div id="command-list"></div>
+
+      <hr>
+
+      <h2>Sessions</h2>
+      <div id="session-list"></div>
+      <button class="clear-btn" id="clear-btn">Clear finished</button>
+    </div>
+
+    <div class="main">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="board">Board</button>
+        <button class="tab-btn" data-tab="logs">Logs</button>
+      </div>
+
+      <!-- Kanban board -->
+      <div class="tab-panel active" id="panel-board">
+        <div class="kanban" id="kanban"></div>
+      </div>
+
+      <!-- Logs -->
+      <div class="tab-panel" id="panel-logs">
+        <div class="log-header">
+          <span class="session-title" id="log-title">No session selected</span>
+          <button id="autoscroll-toggle" class="active">auto-scroll</button>
+        </div>
+        <div id="log-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const COLUMNS = [
+      { key: 'ready', display: 'Ready' },
+      { key: 'planning', display: 'Planning' },
+      { key: 'needsApproval', display: 'Needs Approval' },
+      { key: 'approved', display: 'Approved' },
+      { key: 'executing', display: 'Executing' },
+      { key: 'needsReview', display: 'Needs Review' },
+      { key: 'failed', display: 'Failed' },
+      { key: 'done', display: 'Done' },
+    ];
+
+    const state = {
+      ws: null,
+      commands: [],
+      sessions: new Map(),
+      activeSession: null,
+      autoscroll: true,
+      logs: new Map(),
+      jira: null,
+      jiraEnabled: false,
+      activeTab: 'board',
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const $cmdList = $('command-list');
+    const $sessList = $('session-list');
+    const $logContainer = $('log-container');
+    const $logTitle = $('log-title');
+    const $connStatus = $('connection-status');
+    const $clearBtn = $('clear-btn');
+    const $autoBtn = $('autoscroll-toggle');
+    const $kanban = $('kanban');
+    const $jiraUpdated = $('jira-updated');
+
+    // Tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        $(`panel-${btn.dataset.tab}`).classList.add('active');
+        state.activeTab = btn.dataset.tab;
+      });
+    });
+
+    function connect() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}`);
+      state.ws = ws;
+
+      ws.onopen = () => {
+        $connStatus.textContent = 'connected';
+        $connStatus.classList.add('connected');
+      };
+
+      ws.onclose = () => {
+        $connStatus.textContent = 'disconnected';
+        $connStatus.classList.remove('connected');
+        setTimeout(connect, 2000);
+      };
+
+      ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+    }
+
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'init':
+          state.commands = msg.commands;
+          state.jiraEnabled = msg.jiraEnabled;
+          renderCommands();
+          msg.sessions.forEach(s => state.sessions.set(s.id, s));
+          renderSessions();
+          if (msg.jira) {
+            state.jira = msg.jira;
+            renderKanban();
+          } else {
+            renderKanban();
+          }
+          break;
+
+        case 'jira:update':
+          if (msg.error) {
+            $jiraUpdated.textContent = `Jira error: ${msg.error}`;
+          } else {
+            state.jira = msg;
+            renderKanban();
+          }
+          break;
+
+        case 'session:start':
+          state.sessions.set(msg.session.id, msg.session);
+          state.logs.set(msg.session.id, []);
+          selectSession(msg.session.id);
+          renderSessions();
+          break;
+
+        case 'session:log': {
+          const { id, ts, stream, text } = msg;
+          if (!state.logs.has(id)) state.logs.set(id, []);
+          state.logs.get(id).push({ ts, stream, text });
+          if (state.activeSession === id && state.activeTab === 'logs') appendLog({ ts, stream, text });
+          break;
+        }
+
+        case 'session:end': {
+          const s = state.sessions.get(msg.id);
+          if (s) { s.status = msg.status; s.exitCode = msg.exitCode; }
+          renderSessions();
+          break;
+        }
+
+        case 'logs':
+          state.logs.set(msg.id, msg.entries);
+          if (state.activeSession === msg.id) renderLogs(msg.id);
+          break;
+
+        case 'status':
+          state.sessions.clear();
+          msg.sessions.forEach(s => state.sessions.set(s.id, s));
+          renderSessions();
+          break;
+      }
+    }
+
+    function send(msg) {
+      if (state.ws?.readyState === 1) state.ws.send(JSON.stringify(msg));
+    }
+
+    function categorize(key) {
+      if (key.startsWith('queue')) return 'queue';
+      if (key.startsWith('pr')) return 'pr';
+      return 'other';
+    }
+
+    function renderCommands() {
+      $cmdList.innerHTML = '';
+      for (const cmd of state.commands) {
+        const btn = document.createElement('button');
+        btn.className = `cmd-btn ${categorize(cmd.key)}`;
+        btn.innerHTML = `<div class="cmd-label">${cmd.label}</div><div class="cmd-key">/${cmd.key}</div>`;
+        btn.onclick = () => send({ action: 'run', command: cmd.key });
+        $cmdList.appendChild(btn);
+      }
+    }
+
+    function renderSessions() {
+      $sessList.innerHTML = '';
+      const sorted = [...state.sessions.entries()].sort((a, b) =>
+        new Date(b[1].startedAt) - new Date(a[1].startedAt)
+      );
+
+      for (const [id, s] of sorted) {
+        const div = document.createElement('div');
+        div.className = `session-item${state.activeSession === id ? ' active' : ''}`;
+        const time = new Date(s.startedAt).toLocaleTimeString();
+        div.innerHTML = `
+          <span class="session-dot ${s.status}"></span>
+          <span class="session-label">${s.command}</span>
+          <div class="session-time">${time} &middot; ${s.status}</div>
+          ${s.status === 'running' ? '<div><button class="kill-btn" data-id="' + id + '">kill</button></div>' : ''}
+        `;
+        div.onclick = (e) => {
+          if (e.target.classList.contains('kill-btn')) {
+            send({ action: 'kill', id: e.target.dataset.id });
+            return;
+          }
+          selectSession(id);
+        };
+        $sessList.appendChild(div);
+      }
+    }
+
+    function selectSession(id) {
+      state.activeSession = id;
+      const s = state.sessions.get(id);
+      $logTitle.textContent = s ? `${s.command} [${id}] - ${s.status}` : 'No session';
+      renderSessions();
+
+      // Switch to logs tab
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('[data-tab="logs"]').classList.add('active');
+      $('panel-logs').classList.add('active');
+      state.activeTab = 'logs';
+
+      if (state.logs.has(id)) {
+        renderLogs(id);
+      } else {
+        send({ action: 'logs', id });
+      }
+    }
+
+    function renderLogs(id) {
+      $logContainer.innerHTML = '';
+      const entries = state.logs.get(id) || [];
+      for (const entry of entries) appendLog(entry);
+    }
+
+    function appendLog({ ts, stream, text }) {
+      const div = document.createElement('div');
+      div.className = `log-line ${stream}`;
+      const time = new Date(ts).toLocaleTimeString();
+      div.innerHTML = `<span class="log-ts">${time}</span>${escapeHtml(text)}`;
+      $logContainer.appendChild(div);
+      if (state.autoscroll) $logContainer.scrollTop = $logContainer.scrollHeight;
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Kanban
+    function renderKanban() {
+      if (!state.jiraEnabled) {
+        $kanban.innerHTML = `<div class="jira-disabled">
+          Jira sync is not configured.<br><br>
+          Set environment variables to enable:<br>
+          JIRA_HOST, JIRA_EMAIL, JIRA_API_TOKEN
+        </div>`;
+        return;
+      }
+
+      const jira = state.jira;
+      if (!jira || jira.error) {
+        $kanban.innerHTML = `<div class="jira-disabled">
+          ${jira?.error ? `Jira error: ${escapeHtml(jira.error)}` : 'Loading Jira data...'}
+        </div>`;
+        return;
+      }
+
+      $jiraUpdated.innerHTML = `${jira.total} tickets &middot; ${new Date(jira.updatedAt).toLocaleTimeString()} <button class="refresh-btn" id="jira-refresh-btn">refresh</button>`;
+
+      $kanban.innerHTML = '';
+      for (const col of COLUMNS) {
+        const data = jira.columns[col.key] || { display: col.display, tickets: [] };
+        const colEl = document.createElement('div');
+        colEl.className = 'kanban-col';
+        colEl.dataset.col = col.key;
+
+        colEl.innerHTML = `
+          <div class="kanban-col-header">
+            <span>${data.display}</span>
+            <span class="col-count">${data.tickets.length}</span>
+          </div>
+          <div class="kanban-cards">
+            ${data.tickets.length === 0
+              ? '<div class="kanban-empty">No tickets</div>'
+              : data.tickets.map(t => `
+                <div class="ticket-card">
+                  ${t.parent ? `<div class="ticket-parent">${escapeHtml(t.parent)}</div>` : ''}
+                  <div class="ticket-key">${escapeHtml(t.key)}</div>
+                  <div class="ticket-summary">${escapeHtml(t.summary)}</div>
+                  <div class="ticket-meta">
+                    <span class="ticket-type">${escapeHtml(t.type || '')}</span>
+                    <span>${escapeHtml(t.priority || '')}</span>
+                    <span>${escapeHtml(t.status || '')}</span>
+                  </div>
+                </div>
+              `).join('')}
+          </div>
+        `;
+
+        $kanban.appendChild(colEl);
+      }
+
+      // Bind refresh button
+      const refreshBtn = $('jira-refresh-btn');
+      if (refreshBtn) refreshBtn.onclick = () => send({ action: 'jira:refresh' });
+    }
+
+    $clearBtn.onclick = () => send({ action: 'clear' });
+
+    $autoBtn.onclick = () => {
+      state.autoscroll = !state.autoscroll;
+      $autoBtn.classList.toggle('active', state.autoscroll);
+      if (state.autoscroll) $logContainer.scrollTop = $logContainer.scrollHeight;
+    };
+
+    connect();
+  </script>
+</body>
+</html>
